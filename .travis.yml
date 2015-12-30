@@ -1,0 +1,12 @@
+rvm:
+  - 1.9.3
+  - 2.0.0
+  - 2.1.2
+  - jruby-19mode
+
+gemfile:
+  - ci/Gemfile.rails30
+  - ci/Gemfile.rails31
+  - ci/Gemfile.rails32
+  - ci/Gemfile.rails40
+  - ci/Gemfile.rails41
