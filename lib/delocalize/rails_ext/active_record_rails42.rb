@@ -39,7 +39,7 @@ ActiveRecord::Base.class_eval do
   alias_method_chain :write_attribute, :localization
 
   protected
-  
+
   def self.define_method_attribute=(attr_name)
     if create_time_zone_conversion_attribute?(attr_name, columns_hash[attr_name])
       method_body, line = <<-EOV, __LINE__ + 1
@@ -93,6 +93,60 @@ module ActiveRecord
       def non_numeric_string?(value)
         # TODO: Cache!
         value.to_s !~ /\A\d+#{Regexp.escape(I18n.t(:'number.format.separator'))}?\d*\z/
+      end
+    end
+  end
+end
+
+module ActiveModel
+
+  module Validations
+    class NumericalityValidator < EachValidator # :nodoc:
+      def validate_each(record, attr_name, value)
+        before_type_cast = :"#{attr_name}_before_type_cast"
+
+        raw_value = record.send(before_type_cast) if record.respond_to?(before_type_cast)
+        raw_value ||= value
+
+        if record_attribute_changed_in_place?(record, attr_name)
+          raw_value = value
+        end
+
+        raw_value = Numeric.parse_localized(raw_value) if raw_value.is_a?(String) && I18n.delocalization_enabled?
+
+        return if options[:allow_nil] && raw_value.nil?
+
+        unless value = parse_raw_value_as_a_number(raw_value)
+          record.errors.add(attr_name, :not_a_number, filtered_options(raw_value))
+          return
+        end
+
+        if allow_only_integer?(record)
+          unless value = parse_raw_value_as_an_integer(raw_value)
+            record.errors.add(attr_name, :not_an_integer, filtered_options(raw_value))
+            return
+          end
+        end
+
+        options.slice(*CHECKS.keys).each do |option, option_value|
+          case option
+          when :odd, :even
+            unless value.to_i.send(CHECKS[option])
+              record.errors.add(attr_name, option, filtered_options(value))
+            end
+          else
+            case option_value
+            when Proc
+              option_value = option_value.call(record)
+            when Symbol
+              option_value = record.send(option_value)
+            end
+
+            unless value.send(CHECKS[option], option_value)
+              record.errors.add(attr_name, option, filtered_options(value).merge!(count: option_value))
+            end
+          end
+        end
       end
     end
   end
